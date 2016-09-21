@@ -22,22 +22,25 @@ package com.owncloud.android.ui.dialog;
 
 /**
  *  Dialog requiring confirmation before removing a collection of given OCFiles.
- * 
+ *
  *  Triggers the removal according to the user response.
  */
 
 import android.app.Dialog;
+import android.content.Intent;
 import android.os.Bundle;
 
 import com.owncloud.android.R;
+import com.owncloud.android.datamodel.FileDataStorageManager;
 import com.owncloud.android.datamodel.OCFile;
+import com.owncloud.android.media.MediaService;
 import com.owncloud.android.ui.activity.ComponentsGetter;
 import com.owncloud.android.ui.dialog.ConfirmationDialogFragment.ConfirmationDialogFragmentListener;
 
 import java.util.ArrayList;
 
 public class RemoveFilesDialogFragment extends ConfirmationDialogFragment
-implements ConfirmationDialogFragmentListener {
+        implements ConfirmationDialogFragmentListener {
 
     private ArrayList<OCFile> mTargetFiles;
 
@@ -45,7 +48,7 @@ implements ConfirmationDialogFragmentListener {
 
     /**
      * Public factory method to create new RemoveFilesDialogFragment instances.
-     * 
+     *
      * @param files           Files to remove.
      * @return                Dialog ready to show.
      */
@@ -68,20 +71,20 @@ implements ConfirmationDialogFragmentListener {
             OCFile file = files.get(0);
 
             messageStringId = (file.isFolder()) ?
-                R.string.confirmation_remove_folder_alert :
-                R.string.confirmation_remove_file_alert;
+                    R.string.confirmation_remove_folder_alert :
+                    R.string.confirmation_remove_file_alert;
 
         } else {
             // choose message for more than one file
             messageStringId = (containsFolder) ?
-                R.string.confirmation_remove_folders_alert :
-                R.string.confirmation_remove_files_alert;
+                    R.string.confirmation_remove_folders_alert :
+                    R.string.confirmation_remove_files_alert;
 
         }
 
         int localRemoveButton = (!containsFavorite && (containsFolder || containsDown)) ?
-            R.string.confirmation_remove_local :
-            -1;
+                R.string.confirmation_remove_local :
+                -1;
 
         args.putInt(ARG_MESSAGE_RESOURCE_ID, messageStringId);
         if (files.size() == 1) {
@@ -92,7 +95,7 @@ implements ConfirmationDialogFragmentListener {
         args.putInt(ARG_NEGATIVE_BTN_RES, localRemoveButton);
         args.putParcelableArrayList(ARG_TARGET_FILES, files);
         frag.setArguments(args);
-        
+
         return frag;
     }
 
@@ -109,16 +112,16 @@ implements ConfirmationDialogFragmentListener {
         return newInstance(list);
     }
 
-    
+
     @Override
     public Dialog onCreateDialog(Bundle savedInstanceState) {
         Dialog dialog = super.onCreateDialog(savedInstanceState);
         mTargetFiles = getArguments().getParcelableArrayList(ARG_TARGET_FILES);
-        
+
         setOnConfirmationListener(this);
-        
+
         return dialog;
-    }    
+    }
 
     /**
      * Performs the removal of the target file, both locally and in the server.
@@ -126,15 +129,21 @@ implements ConfirmationDialogFragmentListener {
     @Override
     public void onConfirmation(String callerTag) {
         ComponentsGetter cg = (ComponentsGetter) getActivity();
+
+        stopMediaFiles(cg);
+
         cg.getFileOperationsHelper().removeFiles(mTargetFiles, false);
     }
-    
+
     /**
      * Performs the removal of the local copy of the target file
      */
     @Override
     public void onCancel(String callerTag) {
         ComponentsGetter cg = (ComponentsGetter) getActivity();
+
+        stopMediaFiles(cg);
+
         cg.getFileOperationsHelper().removeFiles(mTargetFiles, true);
     }
 
@@ -142,4 +151,19 @@ implements ConfirmationDialogFragmentListener {
     public void onNeutral(String callerTag) {
         // nothing to do here
     }
+
+    private void stopMediaFiles(ComponentsGetter cg) {
+        for (OCFile ocFile : mTargetFiles) {
+            FileDataStorageManager storageManager = cg.getStorageManager();
+            OCFile file = storageManager.getFileById(ocFile.getFileId());
+
+            if (file != null) {
+                Intent i = new Intent(getActivity(), MediaService.class);
+                i.putExtra(MediaService.EXTRA_FILE, file);
+                i.setAction(MediaService.ACTION_STOP_FILE);
+                getActivity().startService(i);
+            }
+        }
+    }
+
 }
